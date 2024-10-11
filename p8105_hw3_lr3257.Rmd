@@ -1,0 +1,287 @@
+---
+title: "p8105_hw3_lr3257"
+author: "Leonor Rui"
+date: "2024-10-06"
+output: github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(p8105.datasets)
+data("ny_noaa")
+library(patchwork)
+library(ggridges)
+```
+
+# Homework 3
+
+## Problem 1
+
+### Description:
+
+The ny_noaa dataset has `r nrow(ny_noaa)` observations and `r ncol(ny_noaa)` variables. Key variables include date (categorical, date of the weather), prcp (numeric, precipitation in millimeters), snow (numeric, 24-hr snowfall in centimeters), snwd (numeric, accumulated snow depth in inches), tmax (numeric, maximal temperature), tmin(numeric, minimum temperature).
+
+```{r}
+na_counts <- sapply(ny_noaa, function(x) sum(is.na(x)))
+na_counts
+```
+
+As the numbers above shows, quite a large proportion of the observations in this dataset contains NA values, especially for the tmax and tmin variables. These missing values would be a problem for future data analysis, and we should find a way to avoid it.
+
+- Do some data cleaning. Create separate variables for year, month, and day. Ensure observations for temperature, precipitation, and snowfall are given in reasonable units. For snowfall, what are the most commonly observed values? Why?
+```{r}
+ny_df = ny_noaa |>
+  drop_na(tmin, tmax) |>
+  mutate(
+    date = as.character(date),
+    tmin = as.numeric(tmin),
+    tmax = as.numeric(tmax),
+    tmin = tmin / 10,
+    tmax = tmax / 10
+  ) |>
+  separate(date, into = c("year", "month", "day"), sep = "-")
+print(ny_df, n=10)
+
+snow_table = ny_df |>
+  pull(snow) |>
+  table() 
+
+snow_mode = names(sort(snow_table, decreasing = TRUE))[1]
+  
+```
+
+The most commonly observed value for snow is `r snow_mode`, since there is no snow for most times of the year.
+
+- Make a two-panel plot showing the average max temperature in January and in July in each station across years. Is there any observable / interpretable structure? Any outliers?
+
+```{r, warning = FALSE}
+ny_df |>
+  filter(month %in% c("01", "07")) |>
+  group_by(year, month, id) |>
+  summarize(mean_tmax = mean(tmax)) |>
+  ggplot(aes(x = year, y = mean_tmax)) +
+  geom_boxplot() +
+  facet_grid(.~month) +
+  labs(
+    title = "Monthly Average Maximum Temperature in January and July" ,
+    x = "year",
+    y = "Average Max Temperature"
+  ) +
+  theme(aspect.ratio = 1/2) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+```
+
+The average max temperature in Januray generally has a positively skewed distribution across different years, meaning there were often some relatively warm days in January. In 1982 and 2005, there are 2 noticeable negative outliers that are below -10 Fahrenheit Conversely, the average max temperature in July generally has a negatively skewed distribution across the years, meaning there were often some relatively cool days in July. There is one quite extreme outlier in 1988, which represents the mean tmax of the station lower than 15 Fahrenheit, a very cold July.
+
+- Make a two-panel plot showing (i) tmax vs tmin for the full dataset (note that a scatterplot may not be the best option); and (ii) make a plot showing the distribution of snowfall values greater than 0 and less than 100 separately by year.
+
+```{r, warning = FALSE}
+tmin_tmax = ny_df |>
+  ggplot(aes(x = tmin, y = tmax)) +
+  geom_hex() +
+  labs(
+    title = "Hex Plot of Maximum vs. Minimum Temperatures",
+    x = "Minimum Temperature (°F)",
+    y = "Maximum Temperature (°F)"
+  )
+
+snowfall = ny_df |>
+  filter(snow > 0, snow < 100) |>
+  group_by(year) |>
+  ggplot(aes(x = snow, y = year)) +
+  geom_density_ridges() +
+  labs(
+    title = "Density Plots of Snowfall (0~100) by Year",
+    x = "Snowfall Depth (cm)",
+    y = "year"
+  )
+
+(tmin_tmax + snowfall) +
+  plot_layout(ncol = 2, widths = c(1, 1))
+```
+
+## Problem 2
+
+read in datasets
+
+```{r}
+demographic_df = read_csv("data/nhanes_covar.csv", skip = 4) |>
+  janitor::clean_names()
+
+accelerometer_df = read_csv("data/nhanes_accel.csv") |>
+  janitor::clean_names()
+```
+
+organize datasets
+```{r}
+full_acc_df = 
+  left_join(demographic_df, accelerometer_df, by = "seqn") |>
+  filter(age >= 21) |>
+  drop_na(sex, age, bmi, education) |>
+  mutate(
+    sex = fct_recode(as.factor(sex), Male = "1", Female = "2"),
+    education = fct_recode(as.factor(education), "less than high school" = "1", 
+                           "high school equivalent" = "2", "more than high school" = "3")
+  )
+```
+
+- Produce a reader-friendly table for the number of men and women in each education category, and create a visualization of the age distributions for men and women in each education category. Comment on these items.
+
+```{r}
+full_acc_df |>
+  group_by(sex, education) |>
+  summarize(count = n()) |>
+  pivot_wider(
+    names_from = education,
+    values_from = count
+  ) |>
+  knitr::kable() 
+
+full_acc_df |>
+  ggplot(aes(x = age, y = sex)) +
+  facet_grid(education~.) +
+  geom_density_ridges() +
+  labs(
+    title = "Density Ridges Plots of Age Distribution for Men and Women in Each Education Category"
+  )
+```
+
+From the table, we can see that there are more participants with "more than high school" diploma than other diplomas for both male and female, and there are more males with "high school equivalent" diploma than female. From the distribution plots, we can get a clearer vision that the distributions for females with "less than high school" and "high school equivalent" diplomas are relatively left skewed, meaning more elder women have lower diplomas than men of the same age. However, for the "more than high school" diploma, the distribution for female is strongly right skewed, showing how more and more women are getting college degrees in recent years. For males, all three education distributions tend to show a slightly bimodal shape. 
+
+- Traditional analyses of accelerometer data focus on the total activity over the day. Using your tidied dataset, aggregate across minutes to create a total activity variable for each participant. Plot these total activities (y-axis) against age (x-axis); your plot should compare men to women and have separate panels for each education level. Include a trend line or a smooth to illustrate differences. Comment on your plot.
+
+```{r}
+full_acc_df |>
+  mutate(
+    total_acc = rowSums(across(6:ncol(full_acc_df)), na.rm = TRUE)) |>
+  relocate(seqn, total_acc) |>
+  ggplot(aes(x = age, y = total_acc, color = sex)) +
+  facet_grid(education~.) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Scatterplots of Age vs. Total Accelerometer Activity by Sex and Education Level",
+    y = "total accelerometer activity"
+  )
+```
+
+From these plots, we can see that 1. The 24h accelerometer activity is generally higher for female than for male, with the exception of elder males with "less than high school" education level, who have higher activity than females of the same condition. 2. Elder people tend to have lower 24h accelerometer activity than young people. 3. For people with "more than high school" diploma, their accelerometer activity is relatively stable across lifespan.
+
+## Problem 3
+
+Import and clean data
+
+```{r}
+Jan_2020_df = read_csv("data/citibike/Jan 2020 Citi.csv", show_col_types = FALSE) |>
+  janitor::clean_names() |>
+  mutate(
+    month_year = "01/2020"
+  )
+
+July_2020_df = read_csv("data/citibike/July 2020 Citi.csv", show_col_types = FALSE) |>
+  janitor::clean_names() |>
+  mutate(
+    month_year = "07/2020"
+  )
+
+Jan_2024_df = read_csv("data/citibike/Jan 2024 Citi.csv", show_col_types = FALSE) |>
+  janitor::clean_names() |>
+  mutate(
+    month_year = "01/2024"
+  )
+
+July_2024_df = read_csv("data/citibike/July 2024 Citi.csv", show_col_types = FALSE) |>
+  janitor::clean_names() |>
+  mutate(
+    month_year = "07/2024"
+  )
+
+citibike_df = bind_rows(Jan_2020_df, July_2020_df, Jan_2024_df, July_2024_df) |>
+  mutate(
+    month_year = as.factor(month_year),
+    rideable_type = as.factor(rideable_type),
+    weekdays = as.factor(weekdays),
+    member_casual = as.factor(member_casual)
+  )
+
+```
+
+### Description:
+
+The combined citibike dataset has `r nrow(citibike_df)` observations and `r ncol(citibike_df)` variables. There is 1 more variable than the original dataset since I added the variable "month_year" for clarification. To make analysis easier, I also changed some character variables into factor variables. There are  4 factor variables in the dataset: rideable_type, weekdays, member_casual, month_year; 3 character variables: rider_id, start_station_name, end_station_name; and 1 numeric variable: duration.
+
+- Produce a reader-friendly table showing the total number of rides in each combination of year and month separating casual riders and Citi Bike members. Comment on these results.
+
+```{r}
+citibike_df |>
+  group_by(member_casual, month_year) |>
+  summarise(count = n()) |>
+  pivot_wider(
+    names_from = member_casual,
+    values_from = count
+  ) |>
+  knitr::kable()
+```
+
+From the table, we can see that the numbers of both casual and member users are increasing from 2020 to 2024. There are also much more people who use the bike during July than during January, perhaps because of weather issues. Noticeably, the difference (in terms of times) of bike usage between July and January for members is not as big as that for casual users, maybe because those who have paid for membership think they should use the bike more regardless of the weather.
+
+- Make a table showing the 5 most popular starting stations for July 2024; include the number of rides originating from these stations.
+
+```{r}
+July_2024_df |>
+  group_by(start_station_name) |>
+  summarise(count = n()) |>
+  arrange(desc(count)) |>
+  slice(1:5) |>
+  knitr::kable()
+```
+
+- Make a plot to investigate the effects of day of the week, month, and year on median ride duration. This plot can include one or more panels, but should facilitate comparison across all variables of interest. Comment on your observations from this plot.
+
+```{r}
+citibike_df |>
+  separate(col = month_year, into = c("month", "year"), sep = "/") |>
+  mutate(
+    month = as.factor(month),
+    year = as.factor(year)
+  ) |>
+  group_by(weekdays, month, year) |>
+  summarise(median_duration = median(duration)) |>
+  ggplot(aes(x = weekdays, y = median_duration, color = month, group = month)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(.~year) +
+  labs(
+    title = "Connected Dot Plots of Median Ride Duration by Weekday, Month, and Year",
+    y = "Median Ride Duration",
+    x = "Weekdays"
+  )
+```
+
+This plot shows clearly that people tend to ride for a shorter time in January than in July, perhaps of weather concerns. In addition, the median ride duration decreases from 2020 to 2024 for both months, which could be due to the more frequent usages of citibikes for convinient short distance rides. 
+
+- There were relatively few electric Citi Bikes in 2020, but many more are available now. For data in 2024, make a figure that shows the impact of month, membership status, and bike type on the distribution of ride duration. Comment on your results.
+
+```{r}
+citibike_df |>
+  separate(col = month_year, into = c("month", "year"), sep = "/") |>
+  mutate(
+    month = as.factor(month),
+    year = as.factor(year)
+  ) |>
+  group_by(month, rideable_type, member_casual) |>
+  ggplot(aes(x = duration, y = month, fill = member_casual)) +
+  geom_density_ridges(alpha = .3) +
+  facet_grid(rideable_type~.) +
+  labs(
+    title = "Density Ridge Plots of Ride Duration by Month, Membership, and Bike Type"
+  )
+```
+
+From the plot, we can see that 1. People with membership use more short duration rides than casual users in both months and for both types of bikes. 2. More people use electric bikes to ride short distances than using classic bikes, perhaps due to the shorter battery durations. 3. Consistent with previous conclusions, more people ride for shorter durations in Junaury than they do in July, regardless of membership and bike type.  
+
+
+
+
