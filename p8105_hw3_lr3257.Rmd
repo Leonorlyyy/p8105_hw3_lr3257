@@ -169,6 +169,35 @@ full_acc_df |>
 
 From these plots, we can see that 1. The 24h accelerometer activity is generally higher for female than for male, with the exception of elder males with "less than high school" education level, who have higher activity than females of the same condition. 2. Elder people tend to have lower 24h accelerometer activity than young people. 3. For people with "more than high school" diploma, their accelerometer activity is relatively stable across lifespan.
 
+- Accelerometer data allows the inspection activity over the course of the day. Make a three-panel plot that shows the 24-hour activity time courses for each education level and use color to indicate sex. Describe in words any patterns or conclusions you can make based on this graph; including smooth trends may help identify differences.
+
+```{r}
+full_acc_df |>
+  pivot_longer(
+    cols = min1:min1440,
+    names_to = "minute",
+    values_to = "MIMS",
+    names_prefix = "min"
+  ) |>
+  mutate(
+    minute = as.numeric(minute),
+    hour = floor(minute/60)
+  ) |>
+  group_by(seqn, hour, education, sex) |>
+  summarise(MIMS_hour = sum(MIMS)) |>
+  ggplot(aes(x = hour, y = MIMS_hour, color = sex)) +
+  facet_grid(education~.) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "24-Hour Activity by Education Level and Sex",
+    x = "Hour of the Day",
+    y = "Total MIMS per Hour"
+  ) 
+```
+The 24-hour accelerometer activity is very similar cross the education groups and between male and female, with the activity of females slightly higher than males with "more than high school" diploma. Within all 6 combinations of conditions, the activity is higher during daytime (hour 8 - 20) that that during nighttime. 
+
+
 ## Problem 3
 
 Import and clean data
