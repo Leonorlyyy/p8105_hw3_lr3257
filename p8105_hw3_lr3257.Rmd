@@ -13,6 +13,7 @@ library(p8105.datasets)
 data("ny_noaa")
 library(patchwork)
 library(ggridges)
+
 ```
 
 # Homework 3
@@ -274,8 +275,9 @@ citibike_df |>
   separate(col = month_year, into = c("month", "year"), sep = "/") |>
   mutate(
     month = as.factor(month),
-    year = as.factor(year)
-  ) |>
+    year = as.factor(year),
+    weekdays = factor(weekdays, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))) |>
+  arrange(weekdays) |>
   group_by(weekdays, month, year) |>
   summarise(median_duration = median(duration)) |>
   ggplot(aes(x = weekdays, y = median_duration, color = month, group = month)) +
@@ -286,7 +288,8 @@ citibike_df |>
     title = "Connected Dot Plots of Median Ride Duration by Weekday, Month, and Year",
     y = "Median Ride Duration",
     x = "Weekdays"
-  )
+  ) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
 ```
 
 This plot shows clearly that people tend to ride for a shorter time in January than in July, perhaps of weather concerns. In addition, the median ride duration decreases from 2020 to 2024 for both months, which could be due to the more frequent usages of citibikes for convinient short distance rides. 
